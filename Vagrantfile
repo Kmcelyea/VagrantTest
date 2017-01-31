@@ -11,61 +11,58 @@ Vagrant.configure(2) do |config|
 
   config.vm.boot_timeout = 1000
 
-  needed_executables_for_windows = [
-    'SQLEXPRWT_x64_ENU.exe',
-    'rinetd.exe',
-    'NDP452-KB2901907-x86-x64-AllOS-ENU.exe'
-  ]
+  # needed_executables_for_windows = [
+  #   'NDP452-KB2901907-x86-x64-AllOS-ENU.exe'
+  # ]
+  #
+  # needed_executables_for_windows.each do |executable|
+  #   unless File.exists?(".provisioners/windows/executables/#{executable}")
+  #     puts "You are missing #{executable}, which is required to properly provision the windows vm"
+  #     exit 1
+  #   end
+  # end
 
-  needed_executables_for_windows.each do |executable|
-    unless File.exists?(".provisioners/windows/executables/#{executable}")
-      puts "You are missing #{executable}, which is required to properly provision the windows vm"
-      exit 1
-    end
+  config.vm.define "client" do |client|
+    client.vm.box = "win10_dev"
+    client.vm.box_version = "0"
+    client.vm.network "private_network", ip: "10.1.1.33"
+
+    client.vm.communicator = "winrm"
+    client.winrm.retry_limit = 30
+    client.winrm.retry_delay = 10
+    client.winrm.username = "vagrant"
+    client.winrm.password = "vagrant"
+
+    client.vm.provision :shell, path: ".provisioners/windows/scripts/nuget-restore.cmd", run: "always"
+    client.vm.provision :shell, path: ".provisioners/windows/scripts/msbuild.bat", run: "always"
+    client.vm.provision :shell, path: ".provisioners/windows/scripts/copyClient.bat", run: "always"
+    client.vm.provision :shell, path: ".provisioners/windows/scripts/createClientTasks.bat", run: "always"
   end
 
-  config.vm.define "windowsClient" do |windowsClient|
-    windowsClient.vm.box = "williamtsoi/windows_10"
-    windowsClient.vm.box_version = "1.0.0"
-    windowsClient.vm.network "private_network", ip: "192.168.0.10"
-    windowsClient.vm.network :forwarded_port, guest: 80, host: 8081
-    windowsClient.vm.network :forwarded_port, guest: 2201, host: 2201
-    windowsClient.vm.network :forwarded_port, guest: 2202, host: 2202
+  config.vm.define "server" do |server|
+    server.vm.box = "win10_dev"
+    server.vm.box_version = "0"
 
-    windowsClient.vm.communicator = "winrm"
-    windowsClient.winrm.retry_limit = 30
-    windowsClient.winrm.retry_delay = 10
-    windowsClient.winrm.username = "vagrant"
-    windowsClient.winrm.password = "vagrant"
+    server.vm.communicator = "winrm"
+    server.winrm.retry_limit = 30
+    server.winrm.retry_delay = 10
+    server.winrm.username = "vagrant"
+    server.winrm.password = "vagrant"
 
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/config-winrm.bat"
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/install-dot-net-45.cmd"
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/install-iis-windows.ps1"
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/delete-default-iis-website.ps1"
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/install-sql-server.cmd"
-    windowsClient.vm.provision :shell, path: ".provisioners/windows/scripts/copyWindowsClient.bat", run: "always"
+    server.vm.network "private_network", ip: "10.1.1.34"
+    server.vm.network :forwarded_port, guest: 8080, host: 8080
+    server.vm.network :forwarded_port, guest: 59999, host: 59999 #KMS API PORT
+    server.vm.network :forwarded_port, guest: 59913, host: 59913 #Shared API PORT
+    server.vm.network :forwarded_port, guest: 51960, host: 51960 #Admin Client PORT
+    server.vm.network :forwarded_port, guest: 2201, host: 2201
+    server.vm.network :forwarded_port, guest: 2202, host: 2202
 
-    #windowsClient.vm.synced_folder ".", "C:/inetpub/wwwroot/QTKiosk", create:true, type: "virtualbox", mount_options: ["dmode=775,fmode=664"]
-  end
+    server.vm.provision :shell, path: ".provisioners/windows/scripts/createServerIIS.ps1"
+    server.vm.provision :shell, path: ".provisioners/windows/scripts/nuget-restore.cmd", run: "always"
+    server.vm.provision :shell, path: ".provisioners/windows/scripts/buildCopyServer.bat", run: "always"
+    server.vm.provision :shell, path: ".provisioners/windows/scripts/migrateDevServer.bat", run: "always"
+    server.vm.provision :shell, path: ".provisioners/windows/scripts/createServerTasks.bat", run: "always"
 
-  config.vm.define "windowsServer" do |windowsServer|
-    windowsServer.vm.box = "opentable/win-2012r2-standard-amd64-nocm"
-    windowsServer.vm.box_version = "1.0.0"
 
-    windowsServer.vm.communicator = "winrm"
-    windowsServer.winrm.retry_limit = 30
-    windowsServer.winrm.retry_delay = 10
-    windowsServer.winrm.username = "vagrant"
-    windowsServer.winrm.password = "vagrant"
-
-    windowsServer.vm.network "private_network", ip: "192.168.0.11"
-    windowsServer.vm.network :forwarded_port, guest: 80, host: 8080
-
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/config-winrm.bat"
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/install-dot-net.ps1"
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/install-dot-net-45.cmd"
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/install-iis-WinServer.cmd"
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/delete-default-iis-website.ps1"
-    windowsServer.vm.provision :shell, path: ".provisioners/windows/scripts/install-sql-server.cmd"
   end
 end
